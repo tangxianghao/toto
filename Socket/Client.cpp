@@ -42,7 +42,7 @@ void Client::Connect(const char* host, USHORT port)
 			if (recv_data[0] == 'W' && recv_data[1] == 'I' &&recv_data[2] == 'S' &&recv_data[3] == 'T') {
 				memcpy(wist, &recv_data[4], 4);
 				int length = Intel2Length(&recv_data[8]);
-				printf("%c%c%c%c %08x\n", recv_data[0], recv_data[1], recv_data[2], recv_data[3], length);
+				//printf("%c%c%c%c %08x\n", recv_data[0], recv_data[1], recv_data[2], recv_data[3], length);
 				if (length >= 0) {
 					int ret = recv(socket_client, recv_data, length, 0);
 					if (ret > 0) {

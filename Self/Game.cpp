@@ -15,6 +15,8 @@
 #define IDC_STATIC_FAILED               1010
 #endif
 
+#define SHENGWANG_MAX  10000
+
 #define GAME_DES_KEY   "2644894d08a9c3b784993006ea980cfd"
 
 #define GAME_HOST      L"sso.wistone.com"
@@ -35,6 +37,7 @@ Game* Game::self = nullptr;
 
 Game::Game()
 {
+	start = false;
 	self = nullptr;
 	memset(m_ServerHost, 0, sizeof(m_ServerHost));
 	memset(m_ServerId, 0, sizeof(m_ServerId));
@@ -55,7 +58,14 @@ Game::~Game()
 
 int Game::GetConfAccount()
 {
+	if (m_iAccoutCurrentNum) {
+		return m_iAccountNum;
+	}
+
+	m_iAccoutCurrentNum = 0;
 	m_iAccountNum = 0;
+	m_iSuccessNum = 0;
+	m_iFailNum = 0;
 	InsertLogFunc(L"===准备读取配置文件(account.ini)===");
 	CString log;
 	OpenTextFile file;
@@ -77,7 +87,7 @@ int Game::GetConfAccount()
 			}
 
 			Explode explode("::", data);
-			if (explode.GetCount() != 3) {
+			if (explode.GetCount() != 2) {
 				log.Format(L"第(%d)行配置不正确，忽略。", row + 1);
 				InsertLogFunc(log.GetBuffer());
 				continue;
@@ -87,11 +97,10 @@ int Game::GetConfAccount()
 			strcpy(m_stAccoutList[m_iAccountNum].Mail, explode[0]);
 			strcpy(m_stAccoutList[m_iAccountNum].Password, explode[1]);
 			m_stAccoutList[m_iAccountNum].JieSanNum = explode.GetValue2Int(2, 1);
-			m_stAccoutList[m_iAccountNum].Status = 2;
-			printf("Draw\n");
+			m_stAccoutList[m_iAccountNum].Status = STATUS_NO_START;
 			/* 显示到List控件 */
 			InsertAccountFunc(m_iAccountNum, 1, explode[0]);
-			InsertAccountFunc(m_iAccountNum, 2, explode[2]);
+			InsertAccountFunc(m_iAccountNum, 2, "--");
 			InsertAccountFunc(m_iAccountNum, 3, "--");
 			InsertAccountFunc(m_iAccountNum, 4, "未开始");
 
@@ -107,7 +116,8 @@ int Game::GetConfAccount()
 		log = L"找不到配置文件(account.ini)";
 	}
 	InsertLogFunc(log.GetBuffer());
-	return m_iAccountId;
+
+	return m_iAccountNum;
 }
 
 int Game::GetAccoutStatus(int index)
@@ -118,51 +128,68 @@ int Game::GetAccoutStatus(int index)
 	return m_stAccoutList[index].Status;
 }
 
-// 888ba0b3f5812800f7d981502d9026bec7426362d6cd9925
-// 8103f22ee977e56b1ddfcb60edf6aa72a5020dfc7c47087a
+void Game::Start()
+{
+	time_t start_time = time(NULL);
+	m_iAccoutCurrentNum = m_stConfig.StartNum;
+	while (m_iAccoutCurrentNum < m_iAccountNum) {
+		Accout* p = &m_stAccoutList[m_iAccoutCurrentNum];
+		p->Status = STATUS_ING;
+
+		if (!start) {
+			Sleep(50);
+			continue;
+		}
+
+		// 重绘账号列表控件
+		ListReDrawFunc();
+		// 更新文字控件信息
+		SetTextFunc(IDC_STATIC_ACCOUT_NUM, m_iAccoutCurrentNum + 1, m_iAccountNum);
+
+		CString account = p->Mail;
+		CString text;
+		text.Format(L"%d、正在登录帐号：%ws", m_iAccoutCurrentNum + 1, account);
+		InsertLogFunc(text.GetBuffer());
+		UpdateAccountStatusText("正在登录...");
+		// 登录
+		if (!Login(p->Mail, p->Password)) {
+			InsertLogFunc(L"登录失败，请检查帐号或密码是否正确！");
+			UpdateAccountStatusText("登录失败.");
+			p->Status = STATUS_LOGIN_FAILD;
+			m_iFailNum++;
+			SetTextFunc(IDC_STATIC_FAILED, m_iFailNum, -1);
+			goto end;
+		}
+		UpdateAccountStatusText("连接服务器...");
+		// 连接游戏服务器
+		Connect();
+	end:
+		m_iAccoutCurrentNum++;
+		// 重绘账号列表控件
+		ListReDrawFunc();
+
+		if (m_stConfig.AccoutInterval > 0) {
+			Sleep(m_stConfig.AccoutInterval);
+		}
+		if (m_iAccoutCurrentNum == 20)
+			break;
+	}
+	time_t end_time = time(NULL);
+	CString csHTime;
+	csHTime.Format(L"===已全部完成，用时：%d秒===", end_time - start_time);
+	InsertLogFunc(csHTime.GetBuffer());
+}
+
+// 登录[http]
 bool Game::Login(char* mail, char* password)
 {
-	char text[] = "abcdefg";
-	printf("text: %s\n", substr(text, 0, 0));
-	OpenTextFile file;
-	if (file.Open("account.ini")) {
-		printf("文件行数:%d\n", file.GetCount());
-		char data[128];
-		while (file.GetLine(data, 128) != -1) {
-			printf("data:%s\n", trim(data));
-		}
-		printf("读取结束\n");
-		file.Close();
-	}
-	//return false;
-	int num = 0x009e3b1c;
-	0x001c3b9e;
-		//0x00, 0x9e, 0x4a, 0xbc,
-	//	0x00, 0x9a, 0xaf, 0x28,
-	char* str = "abc";
-	char str2[16];
-	memcpy(str2, str, strlen(str) + 1);
-	trim(str2);
-	printf("trim:%s!\n", str2);
-	Explode explode("||", "123|456||789");
-	printf("Count:%d %s %d\n", explode.GetCount(), explode[0], explode.GetValue2Int(0, -1));
-	INT64 i64 = 19011310008890077;
-	for (int i = 0; i < 8; i++) {
-		char ch = (i64 >> (i * 8)) & 0xff;
-		printf("%02x ", ch & 0xff);
-	}
-	printf("\n %08x ", (i64 >> 32) * 2);
-	//return false;
 	char desMail[128], desPassword[128];
-#if 0
-#else
 	DesEncrypt(desMail, GAME_DES_KEY, mail, strlen(mail));
 	DesEncrypt(desPassword, GAME_DES_KEY, password, strlen(password));
-	printf("mail:%s\n", desMail);
-	printf("password:%s\n", desPassword);
-#endif
-	CString result;
+	//printf("mail:%s\n", desMail);
+	//printf("password:%s\n", desPassword);
 
+	CString result;
 	CString loginPath = GAME_LOGINPATH;
 	loginPath += L"?source_area=China&version=1.0.3";
 
@@ -183,8 +210,8 @@ bool Game::Login(char* mail, char* password)
 
 	Json json;
 	json.parseString((char*)result.GetBuffer());
-	printf("antiAddiction:%s\nloginTicket:%s\nsessionId:%s\n",
-		json.value("antiAddiction"), json.value("loginTicket"), json.value("sessionId"));
+	//printf("antiAddiction:%s\nloginTicket:%s\nsessionId:%s\n",
+	//	json.value("antiAddiction"), json.value("loginTicket"), json.value("sessionId"));
 	//return false;
 	loginPath = GAME_LOGINPATH;
 	loginPath += L";jsession=";
@@ -215,12 +242,15 @@ bool Game::Login(char* mail, char* password)
 
 	json.parseString((char*)result.GetBuffer());
 	char* wst = json.value("WST");
-	printf("WST:%s\n", json.value("WST"));
-	int wst_length = wst ? strlen(wst) : 0; // strlen(json.value("WST"));
+	if (!wst) {
+		return false;
+	}
+	//printf("WST:%s\n", json.value("WST"));
+	int wst_length = strlen(wst); // strlen(json.value("WST"));
 	memcpy(m_Wst, wst, wst_length + 1);
 	SetWistoneId(json.value("wistoneId"));
 	SetUid();
-	printf("uid:%s (%d)\n", m_Uid, strlen(m_Uid)); // 19011310008890077
+	//printf("uid:%s (%d)\n", m_Uid, strlen(m_Uid)); // 19011310008890077
 	json.clear();
 
 
@@ -229,24 +259,55 @@ bool Game::Login(char* mail, char* password)
 
 void Game::Connect()
 {
+	memset(m_ServerHost, 0, sizeof(m_ServerHost));
+	memset(m_ServerId, 0, sizeof(m_ServerId));
+	m_ServerPort = 0;
 	//return;
 	Game::GetInstance()->InsertLogFunc(L"连接服务器[1]！");
-	m_Client.onconnect_error = OnConnectError;
-	m_Client.onconect = OnConnect;
-	m_Client.onread = OnRead;
-	m_Client.onclose = OnClose;
-	m_Client.onerror = OnError;
-	m_Client.Connect(GAME_SER_IP2, GAME_SER_PORT2);
+	m_pClient = new Client;
+	m_pClient->m_iTimeOut = m_stConfig.AccountTimeOut;
+	m_pClient->onconnect_error = OnConnectError;
+	m_pClient->onconect = OnConnect;
+	m_pClient->onread = OnRead;
+	m_pClient->onclose = OnClose;
+	m_pClient->onerror = OnError;
+	m_pClient->Connect(GAME_SER_IP2, GAME_SER_PORT2);
+	delete m_pClient;
 }
 
 int Game::GetAccoutId(const char * data)
 {
-	return m_iAccountId = m_Client.Intel2Length(&data[9]);
+	return m_iAccountId = m_pClient->Intel2Length(&data[9]);
+}
+
+/*
+设置帐号成功
+*/
+void Game::SetAccountSuceess()
+{
+	m_stAccoutList[m_iAccoutCurrentNum].Status = STATUS_SUCCESS;
+	UpdateAccountStatusText("请求成功.");
+	ListReDrawFunc();
+	m_iSuccessNum++;
+	SetTextFunc(IDC_STATIC_SUC, m_iSuccessNum, -1);
+	m_pClient->Close(true);
+}
+/*
+设置帐号失败
+*/
+void Game::SetAccountFailed()
+{
+	m_stAccoutList[m_iAccoutCurrentNum].Status = STATUS_LOGIN_FAILD;
+	UpdateAccountStatusText("请求失败.");
+	ListReDrawFunc();
+	m_iFailNum++;
+	SetTextFunc(IDC_STATIC_FAILED, m_iFailNum, -1);
+	m_pClient->Close(true);
 }
 
 bool Game::GetTcpServerInfo(const char * data)
 {
-	if (m_Client.Intel2Length(data) != 0x01) {
+	if (m_pClient->Intel2Length(data) != 0x01) {
 		return false;
 	}
 
@@ -390,30 +451,59 @@ void Game::MakeTcpConfirmLogin()
 	m_SendLength = sizeof(data) + uidLength - 17;
 }
 
+// 获取声望数据
+void Game::MakeTcpGetShengWang()
+{
+	char data[] = {
+		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xf9
+	};
+	for (int i = 0; i < sizeof(data); i += 16) {
+		memcpy(&data[i + 4], m_Wist, 4);
+	}
+	memcpy(m_SendStr, data, sizeof(data));
+	m_SendLength = sizeof(data);
+}
+
+// 获取建筑ID请求数据
 void Game::MakeTcpGetZY()
 {
 	char data[] = {
 		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x07, 0xea, 0xfe,
 		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x27, 0x16, 0x04,
 		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x0f, 0xa1,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x07, 0xd1,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x07, 0xea,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x07, 0xe2,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x42, 0x69,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x42, 0x6a,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x0b, 0xbd,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x55, 0xf6,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x32, 0xca,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xed,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x13, 0x89,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xfc,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xf9,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xed,
-		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x0b, 0xbd
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x07, 0xd1,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x07, 0xea,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x07, 0xe2,
+		0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x42, 0x69, // 获得建筑ID
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x42, 0x6a,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x0b, 0xbd,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x55, 0xf6,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x32, 0xca,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xed,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xf7,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xf9, // 获得声望
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xfc,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x03, 0xed,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x0b, 0xbd,
+		//0x57, 0x49, 0x53, 0x54, 0x61, 0x2d, 0xd4, 0x96, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x13, 0x89,
 	};
 	for (int i = 0; i < sizeof(data); i += 16) {
 		memcpy(&data[i + 4], m_Wist, 4);
 	}
+	memcpy(m_SendStr, data, sizeof(data));
+	m_SendLength = sizeof(data);
+}
+
+// 慈善数据
+void Game::MakeTcpCiShan()
+{
+	char data[] = {
+		0x57, 0x49, 0x53, 0x54, 
+		0x61, 0x2d, 0xd4, 0x96, 
+		0x00, 0x00, 0x00, 0x05, 
+		0x00, 0x00, 0x07, 0xe4,
+		0x01
+	};
 	memcpy(m_SendStr, data, sizeof(data));
 	m_SendLength = sizeof(data);
 }
@@ -456,11 +546,27 @@ void Game::MakeTcpStr(int op, int id)
 	m_SendLength = sizeof(data);
 }
 
-bool Game::IsGetZY(const char* data)
+/*
+获取声望值
+data=游戏服务器返回的数据
+*/
+int Game::GetOpCode(const char* data)
 {
-	return data[2] == 0x42 && data[3] == 0x69;// && data[4] == 0x01 && data[5] == 0x09;
+	return m_pClient->Intel2Length(data);
 }
-
+/*
+获取声望值
+data=游戏服务器返回的数据
+*/
+int Game::GetShengWang(const char* data)
+{
+	return m_pClient->Intel2Length(&data[55]);
+}
+/*
+获得训练营ID
+data=游戏服务器返回的数据
+length=data长度
+*/
 int Game::GetXLYId(const char* data, int length)
 {
 	int id = 0;
@@ -468,9 +574,9 @@ int Game::GetXLYId(const char* data, int length)
 		if ((i + 0x08) > length)
 			break;
 
-		int no = m_Client.Intel2Length(&data[i + 4]);
+		int no = m_pClient->Intel2Length(&data[i + 4]);
 		if (no == 0x0e) {
-			id = m_Client.Intel2Length(&data[i]);
+			id = m_pClient->Intel2Length(&data[i]);
 		}
 	}
 	printf("\n");
@@ -502,7 +608,7 @@ void Game::SetSocket(SOCKET socket)
 
 Client& Game::GetClient()
 {
-	return m_Client;
+	return *m_pClient;
 }
 
 char Game::Hex2Char(char ch, char ch2)
@@ -525,6 +631,13 @@ char Game::Char2Num(char ch)
 		ch = 0;
 	}
 	return ch;
+}
+
+void Game::UpdateAccountStatusText(char * text, int row)
+{
+	if (row == -1)
+		row = m_iAccoutCurrentNum;
+	UpdateTextFunc(row, 4, text);
 }
 
 void Game::OnConnectError(const char *, USHORT)
@@ -557,62 +670,136 @@ void Game::OnRead(const char* host, USHORT port, const char* data, int length, c
 	//printf("%02x %02x %02x %02x\n", wist[0], wist[1], wist[2], wist[3]);
 	int i;
 	for (i = 0; i < length; i++) {
-		printf("%02x ", data[i] & 0xff);
+		//printf("%02x ", data[i] & 0xff);
 		if ((i % 0x10) == 0 && i > 0) {
-			printf("\n");
+			//printf("\n");
 		}
 	}
 	printf("\n-----------------------------\n");
 	for (i = 0; i < length; i++) {
-		printf("%c ", data[i] >= 38 && data[i] <= 126 ? data[i] : '.');
+		//printf("%c ", data[i] >= 38 && data[i] <= 126 ? data[i] : '.');
 		if ((i % 0x10) == 0 && i > 0) {
-			printf("\n");
+			//printf("\n");
 		}
 	}
 	printf("\n");
 	if (port == GAME_SER_PORT2) {
 		if (game->GetTcpServerInfo(data)) {
 			CString text;
-			text.Format(L"成功获取游戏服务器信息(%s:%s, %s)！", game->m_ServerHost, game->m_ServerPort, game->m_ServerId);
+			text.Format(L"成功获取游戏服务器信息！");
 
-			Game::GetInstance()->InsertLogFunc(text.GetBuffer());
+			game->InsertLogFunc(text.GetBuffer());
+			game->UpdateTextFunc(game->m_iAccoutCurrentNum, 3, game->m_ServerId);
 			game->GetAccoutId(data);
 			game->GetClient().Close(true);
 		}
 	}
 	else {
-		if (game->m_UpNum == 0) {
-			Game::GetInstance()->InsertLogFunc(L"请求资源信息！");
-			game->MakeTcpGetZY();
-			//game->MakeTcpStr(0x00000bb9, 0x001e6c9e);
-			int ret = 0;
-			ret = game->Send();
-			printf("发送长度资源:%d\n", ret);
-			game->m_UpNum++;
-		}
-		else {
-			if (game->IsGetZY(data)) {
-				const char* start = &data[10];
-				int id = game->GetXLYId(&data[10], length - 10);
-				if (id) {
-					Game::GetInstance()->InsertLogFunc(L"成功获取资源ID！");
-				}
-				else {
-					Game::GetInstance()->InsertLogFunc(L"无法获取资源ID！");
-				}
-				Game::GetInstance()->InsertLogFunc(L"请求训练！");
-				// 0x00000bb9 为训练指令
-				game->MakeTcpStr(0x00000bb9, id);
-				//game->MakeTcpJieSan(0x02);
+		int opcode = game->GetOpCode(data);
+		switch (opcode)
+		{
+		case OP_LOGIN:
+		{
+			if (length < 10 && data[4] == 0x01) {
+				game->InsertLogFunc(L"验证成功，获取声望值...");
+				game->UpdateAccountStatusText("获取声望值...");
+				game->MakeTcpGetShengWang();
 				int ret = game->Send();
-				printf("发送长度升级:%d\n", ret);
-
-				Game::GetInstance()->InsertLogFunc(L"请求解散！");
-				//game->MakeTcpJieSan(0x02);
-				//ret = game->Send();
-
 				game->m_UpNum++;
 			}
+			else {
+				game->SetAccountFailed();
+			}
+			break;
+		}
+		case OP_SHENGWANG:
+		{
+			int shengwang = game->GetShengWang(data);
+			CString text;
+			text.Format(L"声望值：%d", shengwang);
+			game->InsertLogFunc(text.GetBuffer());
+
+			char sSW[16];
+			sprintf_s(sSW, "%d", shengwang);
+			game->UpdateTextFunc(game->m_iAccoutCurrentNum, 2, sSW);
+
+			if (!game->m_stConfig.Close) {
+				if (shengwang < 10000) {
+					game->UpdateAccountStatusText("获取军工厂...");
+					game->InsertLogFunc(L"声望小于10000，获取军工厂ID.");
+					game->MakeTcpGetZY();
+					game->Send();
+				}
+				else {
+					game->InsertLogFunc(L"声望达到10000，无须训练.");
+					game->SetAccountSuceess();
+				}
+			}
+			else {
+				if (shengwang > 9999) {
+					game->UpdateAccountStatusText("慈善...");
+					game->InsertLogFunc(L"慈善.");
+					game->MakeTcpCiShan();
+					game->Send();
+
+					int cha = shengwang - 9999;
+					int san = cha >> 1;
+					if (cha & 0x01)
+						san += 1;
+
+					CString csSan;
+					csSan.Format(L"声望达到%d，解散数量:%d", shengwang, san);
+					game->UpdateAccountStatusText("解散...");
+					game->InsertLogFunc(csSan.GetBuffer());
+					game->MakeTcpJieSan(san);
+					game->Send();
+				}
+				else {
+					game->InsertLogFunc(L"声望小于10000，无须解散.");
+					game->SetAccountSuceess();
+				}
+			}
+			break;
+		}
+		case OP_JIANZHU:
+		{
+			const char* start = &data[10];
+			int id = game->GetXLYId(&data[10], length - 10);
+			if (id) {
+				game->InsertLogFunc(L"成功获取军工厂ID！");
+			}
+			else {
+				game->UpdateAccountStatusText("获取军工厂id失败.");
+				game->InsertLogFunc(L"无法获取军工厂ID！");
+			}
+			game->UpdateAccountStatusText("训练...");
+			game->InsertLogFunc(L"请求训练！");
+			// 0x00000bb9 为训练指令
+			game->MakeTcpStr(OP_XUNLIAN, id);
+			//game->MakeTcpJieSan(0x02);
+			int ret = game->Send();
+			//printf("发送长度升级:%d\n", ret)；
+			game->m_UpNum++;
+			break;
+		}
+		case OP_XUNLIAN:
+			game->InsertLogFunc(L"训练成功！");
+			game->SetAccountSuceess();
+			break;
+		case OP_JIESAN:
+			game->InsertLogFunc(L"解散成功！");
+			game->SetAccountSuceess();
+			break;
+		case OP_CISHAN:
+			if (length < 10) {
+				game->InsertLogFunc(L"慈善成功！");
+			}
+			else {
+				game->InsertLogFunc(L"慈善失败，可能未冷却！");
+			}
+			break;
+		default:
+			break;
 		}
 	}
 }
@@ -626,17 +813,22 @@ void Game::OnClose(const char* host, USHORT port)
 		game->GetClient().Connect(game->m_ServerHost, game->m_ServerPort);
 	}
 	else {
+		if (game->m_stAccoutList[game->m_iAccoutCurrentNum].Status == STATUS_ING) {
+			game->SetAccountFailed();
+		}
 		Game::GetInstance()->InsertLogFunc(L"连接关闭[2]！");
 	}
 }
 
 void Game::OnError(const char *, USHORT)
 {
+	Game::GetInstance()->UpdateAccountStatusText("连接错误.");
 	Game::GetInstance()->InsertLogFunc(L"连接发送错误！");
 }
 
 void Game::OnTimeOut(const char* host, USHORT port, int sec)
 {
+	Game::GetInstance()->UpdateAccountStatusText("连接超时.");
 	Game::GetInstance()->InsertLogFunc(L"连接超时！");
 }
 

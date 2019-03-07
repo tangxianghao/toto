@@ -7,16 +7,30 @@
 #define STATUS_LOGIN_FAILD 0x01
 #define STATUS_SUCCESS     0x02
 #define STATUS_TIME_OUT    0x03
-#define STATUS_ING         0x04        
+#define STATUS_ING         0x04
+
+// 登录操作码
+#define OP_LOGIN     0x000003e9
+// 声望数据操作码
+#define OP_SHENGWANG 0x000003f9
+// 建筑数据操作码
+#define OP_JIANZHU   0x00004269
+// 训练操作码
+#define OP_XUNLIAN   0x00000bb9
+// 解散操作码
+#define OP_JIESAN    0x00000bba
+// 慈善操作码
+#define OP_CISHAN    0x000007e4
 
 typedef unsigned char byte;
 typedef void(*InsertAccount)(int, int, char*);
 typedef void (*InsertLog)(wchar_t*);
 typedef void(*SetText)(int, int, int);
+typedef void(*UpdateText)(int, int, char*);
 typedef void(*ListReDraw)();
 
 typedef struct struct_accout {
-	char Mail[128];     // 邮箱帐号
+	char Mail[128];     // 邮箱
 	char Password[128]; // 密码
 	int  JieSanNum;     // 解散数量
 	int  Status;        // 状态
@@ -36,6 +50,8 @@ public:
 		index=索引
 	*/
 	int GetAccoutStatus(int index);
+	/* 开始执行 */
+	void Start();
 	/* 登录 */
 	bool Login(char* mail, char* password);
 	/* 连接游戏服务器 */
@@ -45,6 +61,14 @@ public:
 		data=请求106.75.17.197获取到的数据
 	*/
 	int  GetAccoutId(const char* data);
+	/*
+	设置帐号成功
+	*/
+	void SetAccountSuceess();
+	/*
+	设置帐号失败
+	*/
+	void SetAccountFailed();
 	/*
 		获取游戏服务器IP地址和端口
 		data=请求106.75.17.197获取到的数据
@@ -56,8 +80,12 @@ public:
 	void MakeTcpFirstStr();
 	/* 暂无 */
 	void MakeTcpConfirmLogin();
+	/* 获取声望数据 */
+	void MakeTcpGetShengWang();
 	/* 获取资源数据 */
 	void MakeTcpGetZY();
+	/* 慈善 */
+	void MakeTcpCiShan();
 	/*
 		解散兵力的数据
 		num=解散数量
@@ -70,10 +98,15 @@ public:
 	*/
 	void MakeTcpStr(int op, int id);
 	/*
-		是否是资源数据
+		获取操作码
 		data=游戏服务器返回的数据
 	*/
-	bool IsGetZY(const char* data);
+	int GetOpCode(const char* data);
+	/*
+		获取声望值
+		data=游戏服务器返回的数据
+	*/
+	int GetShengWang(const char* data);
 	/*
 		获得训练营ID
 		data=游戏服务器返回的数据
@@ -90,6 +123,7 @@ public:
 	Client& GetClient();
 	char Hex2Char(char ch, char ch2);
 	char Char2Num(char ch);
+	void UpdateAccountStatusText(char* text, int row=-1);
 	static void OnConnectError(const char*, USHORT);
 	static void OnConnect(const char*, USHORT, SOCKET);
 	static void OnRead(const char*, USHORT, const char*, int, const char*);
@@ -98,9 +132,13 @@ public:
 	static void OnTimeOut(const char*, USHORT, int);
 	static Game* GetInstance();
 public:
+	/* 是否开始 */
+	bool start;
 	int    m_UpNum = 0;
 	/* 写入List控件帐号列表函数 */
 	InsertAccount InsertAccountFunc;
+	/* 更新List控件文字函数 */
+	UpdateText UpdateTextFunc;
 	/* 写入List控件日记函数 */
 	InsertLog InsertLogFunc;
 	/* 写入Static控件函数 */
@@ -109,17 +147,24 @@ public:
 	ListReDraw ListReDrawFunc;
 	/* 一些配置 */
 	struct {
-		int AccoutInterval; // 每个帐号登录间隔
-		int AccountTimeOut; // 每个帐号最大超时
-		int StartNum;       // 帐号列表开始执行序号
+		int  AccoutInterval; // 每个帐号登录间隔
+		int  AccountTimeOut; // 每个帐号最大超时
+		int  StartNum;       // 帐号列表开始执行序号
+		int Close;           // 是否是关门操作
 	} m_stConfig;
 protected:
-	/* 帐号数量 */
+	/* 当前执行帐号序号 */
+	int    m_iAccoutCurrentNum;
+	/* 帐号总数量 */
 	int    m_iAccountNum;
 	/* 帐号列表 */
 	Accout* m_stAccoutList;
+	/* 成功数量 */
+	int m_iSuccessNum;
+	/* 失败数量 */
+	int m_iFailNum;
 	/* */
-	Client m_Client;
+	Client* m_pClient;
 	/* */
 	SOCKET m_Socket;
 	/* 游戏服务器地址 */
