@@ -18,39 +18,50 @@ void Client::Connect(const char* host, USHORT port)
 	server_in.sin_family = AF_INET;
 	server_in.sin_port = htons(port);
 	if (connect(socket_client, (struct sockaddr *)&server_in, sizeof(server_in)) == SOCKET_ERROR) {
-		this->onconnect_error(host, port);
+		this->onconnect_error(m_pGame, host, port);
 		return;
 	}
 
-	this->onconect(host, port, socket_client);
+	this->onconect(m_pGame, host, port, socket_client);
 
 	time_t last_time = time(NULL);
 	char  wist[4];
 	char* recv_data = new char[1024 * 4];
 	while (!m_Close) {
-		if (m_iTimeOut > 0) {
+		if (0 && m_iTimeOut > 0) {
 			time_t now_time = time(NULL);
 			if ((now_time - last_time) >= m_iTimeOut) {
 				if (ontimeout) {
-					ontimeout(host, port, now_time - last_time);
+					ontimeout(m_pGame, host, port, now_time - last_time);
 				}
+				printf("超时链接:%d\n", m_iTimeOut);
 				break;
 			}
+			last_time = now_time;
 		}
 		int ret = recv(socket_client, recv_data, 12, 0);
 		if (ret > 0) {
-			if (recv_data[0] == 'W' && recv_data[1] == 'I' &&recv_data[2] == 'S' &&recv_data[3] == 'T') {
+			if (recv_data[0] == 'W' && recv_data[1] == 'I' && recv_data[2] == 'S' &&recv_data[3] == 'T') {
 				memcpy(wist, &recv_data[4], 4);
 				int length = Intel2Length(&recv_data[8]);
 				//printf("%c%c%c%c %08x\n", recv_data[0], recv_data[1], recv_data[2], recv_data[3], length);
 				if (length >= 0) {
-					int ret = recv(socket_client, recv_data, length, 0);
-					if (ret > 0) {
-						this->onread(host, port, recv_data, length, wist);
+					int ret = 0, read_length = length, has_read = 0;
+					while (has_read < length) {
+						ret = recv(socket_client, &recv_data[has_read], read_length, 0);
+						printf("has read:%d ret:%d read length:%d\n", has_read, ret, read_length);
+						if (ret > 0) {
+							if (ret < read_length) {
+								printf("ret:%d length:%d\n", ret, length);
+							}
+							read_length -= ret;
+							has_read += ret;
+						}
+						else {
+							goto error;
+						}
 					}
-					else {
-						goto error;
-					}
+					this->onread(m_pGame, host, port, recv_data, length, wist);
 				}
 			}
 			else {
@@ -59,13 +70,14 @@ void Client::Connect(const char* host, USHORT port)
 		}
 	error:
 		if (ret == 0) {
+			printf("ret====0\n");
 			//当ret == 0 说明服务器掉线。
 			break;
 		}
 		else if (ret < 0) {
 			//当ret < 0 说明出现了异常 例如阻塞状态解除，或者读取数据时出现指针错误等。
 			//所以我们这里要主动断开和客户端的链接。
-			this->onerror(host, port);
+			this->onerror(m_pGame, host, port);
 			closesocket(socket_client);
 			break;
 		}
@@ -74,7 +86,9 @@ void Client::Connect(const char* host, USHORT port)
 	closesocket(socket_client);
 	WSACleanup();
 
-	this->onclose(host, port);
+	//printf("关闭连接:%d\n", m_Close);
+
+	this->onclose(m_pGame, host, port);
 }
 
 void Client::Close(bool var)

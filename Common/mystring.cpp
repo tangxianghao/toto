@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
+#include <windows.h>
 
 //比较两个字符串是否相等, len=比较的长度
 bool strneq(char* str_1, char* str_2, unsigned int len) { 
@@ -11,6 +13,40 @@ bool strneq(char* str_1, char* str_2, unsigned int len) {
 		}
 	}
 	return true;
+}
+
+// 十六进制转成数字
+int hextoi32(char* data)
+{
+	if (data == nullptr)
+		return 0;
+
+	if (data[0] == '0') {
+		if (data[1] == 'x' || data[1] == 'X')
+			data += 2;
+	}
+	//printf("%s\n", data);
+	int value = 0;
+	while (*data) {
+		char ch = *data;
+		//printf("%c ", ch);
+		if (ch >= '0' && ch <= '9') {
+			ch = ch - '0';
+		}
+		else if (ch >= 'A' && ch <= 'F') {
+			ch = ch - 'A' + 0x0A;
+		}
+		else if (ch >= 'a' && ch <= 'f') {
+			ch = ch - 'a' + 0x0a;
+		}
+		else {
+			ch = 0;
+		}
+	   // printf("%d\n", ch);
+		value = value * 0x10 + ch;
+		data++;
+	}
+	return value;
 }
 
 char* trim(char* string, char ch)
@@ -65,6 +101,48 @@ char* rtrim(char* string, char ch)
 			break;
 		}
 		string[i] = 0;
+	}
+	return string;
+}
+
+// 替换字符
+char* replace(char* string, char find, char rep)
+{
+	if (rep) {
+		for (char* p = string; *p; p++) {
+			bool eq = false;
+			if (find > 0) {
+				eq = find == *p;
+			}
+			else {
+				eq = '\r' == *p || '\n' == *p || '\t' == *p;
+			}
+			if (eq) {
+				*p = rep;
+			}
+		}
+	}
+	else {
+		for (char* p = string; *p; p++) {
+
+			bool eq = false;
+			if (find > 0) {
+				eq = find == *p;
+			}
+			else {
+				eq = '\r' == *p || '\n' == *p || '\t' == *p;
+			}
+			if (eq) {
+				int i = 0;
+				char* p2 = p + 1;
+				for (; p2[i]; i++) {
+					p[i] = p2[i];
+				}
+				p[i] = p2[i];
+
+				p--;
+			}
+		}
 	}
 	return string;
 }
@@ -162,3 +240,173 @@ char* int2utf8(char* dest, int* num, int len) {
 	dest[index] = 0;
 	return dest;
 }
+
+/*
+网络字端转成数字
+*/
+int ctoi32(const char * data)
+{
+	int v = 0;
+	v |= (data[0] << 24) & 0xff000000;
+	v |= (data[1] << 16) & 0x00ff0000;
+	v |= (data[2] << 8) & 0x0000ff00;
+	v |= (data[3] << 0) & 0x000000ff;
+	return v;
+}
+
+/*
+网络字端转成数字--备选
+data 数组指针
+start_sub 数组开始下标
+str_len 取多少个字节
+*/
+int ctoinum(const char* data, int start_sub, char str_len)
+{
+	int res_str = 0;
+	int yidong = 0;
+	for (int i = 0; i < str_len; i++) {
+		yidong = (str_len - 1 - i) * 8;
+		res_str = res_str | (data[start_sub + i] << yidong);
+	}
+	return res_str;
+}
+
+/*
+网络字端转成数字
+*/
+__int64 ctoi64(const char* data)
+{
+	__int64 v = 0;
+	for (int i = 0; i < 8; i++) {
+		//printf("%02x ", data[i] & 0xff);
+		v |= (data[i] & 0xff) << ((7 - i) * 8);
+	}
+	//printf("\n");
+	//printf(" --> %lld、%d\n", v, 123);
+	return v;
+}
+
+/*
+ 复制int32到内存
+*/
+char* copy_i32(char * dst, int v)
+{
+	for (int i = 0; i < 4; i++) { 
+		dst[i] = (v >> (i * 8)) & 0xff;
+	}
+	return dst;
+}
+
+/*
+ 复制int32（转成网络字节）到内存
+*/
+char* copy_i32_net(char * dst, int v)
+{
+	for (int i = 0; i < 4; i++) { 
+		dst[i] = (v >> ((3 - i) * 8)) & 0xff;
+	}
+	return dst;
+}
+
+/*
+ 复制int64到内存
+*/
+char* copy_i64(char * dst, __int64 v)
+{
+	for (int i = 0; i < 8; i++) {
+		dst[i] = (v >> (i * 8)) & 0xff;
+	}
+	return dst;
+}
+
+/*
+ 复制int64（转成网络字节）到内存
+*/
+ char* copy_i64_net(char * dst, __int64 v)
+ {
+	 for (int i = 0; i < 8; i++) {
+		 dst[i] = (v >> ((7 - i) * 8)) & 0xff;
+	 }
+	 return dst;
+ }
+
+ /*
+utf8转成gb2312
+*/
+ char* Utf82GB2312(const char* utf8)
+{
+	int len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
+	wchar_t* wstr = new wchar_t[len + 1];
+	memset(wstr, 0, len + 1);
+	MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wstr, len);
+	len = WideCharToMultiByte(CP_ACP, 0, wstr, -1, NULL, 0, NULL, NULL);
+	char* str = new char[len + 1];
+	memset(str, 0, len + 1);
+	WideCharToMultiByte(CP_ACP, 0, wstr, -1, str, len, NULL, NULL);
+	if (wstr) delete[] wstr;
+	return str;
+}
+
+ /*
+获取时间
+*/
+int gettimeofday(struct timeval* tv)
+{
+	FILETIME ft;
+	unsigned __int64 tmpres = 0;
+	static int tzflag;
+
+	if (NULL != tv)
+	{
+		GetSystemTimeAsFileTime(&ft);
+
+		tmpres |= ft.dwHighDateTime;
+		tmpres <<= 32;
+		tmpres |= ft.dwLowDateTime;
+	#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+		/*converting file time to unix epoch*/
+		tmpres /= 10;  /*convert into microseconds*/
+		tmpres -= DELTA_EPOCH_IN_MICROSECS;
+		tv->tv_sec = (long)(tmpres / 1000000UL);
+		tv->tv_usec = (long)(tmpres % 1000000UL);
+	}
+
+	return 0;
+}
+
+/*
+获取毫秒
+*/
+__int64 getmillisecond()
+{
+	timeval t;
+	gettimeofday(&t);
+	return ((__int64)(t.tv_sec) * 1000) + (t.tv_usec / 1000);
+}
+
+/* 获取日期 */
+int getday(int* hour)
+{
+	time_t now_time = time(nullptr);
+	tm t;
+	localtime_s(&t, &now_time);
+
+	if (hour) {
+		*hour = t.tm_hour;
+	}
+
+	return t.tm_mday;
+}
+
+
+unsigned int getMorningTime()
+{
+	time_t t = time(NULL);
+	struct tm* tm = localtime(&t);
+	tm->tm_hour = 0;
+	tm->tm_min = 0;
+	tm->tm_sec = 0;
+	return  mktime(tm);
+}
+
+

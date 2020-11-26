@@ -1,4 +1,5 @@
 #include "OpenTextFile.h"
+#include "mystring.h"
 
 bool OpenTextFile::Open(const char * file)
 {
@@ -16,10 +17,11 @@ int OpenTextFile::GetLine(char* data, int maxCount)
 {
 	while (!feof(m_File)) {
 		if (fgets(data, maxCount, m_File)) {
+			//printf("Êý¾Ý:%s %d\n", data, data[0]);
 			if (data[0] == '#' || data[0] == ';') {
 				return 0;
 			}
-			return strlen(data);
+			return strlen((data));
 		}
 		break;
 	}

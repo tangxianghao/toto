@@ -243,16 +243,16 @@ char* Json::valueOfChild(char* key) {
 	return NULL;
 }
 
-inline int Json::valueToInt(char* key) {
+int Json::valueToInt(char* key) {
 	char* value = this->value(key);
 	return value ? atoi(this->value(key)) : 0;
 }
 
-inline float Json::valueToFloat(char* key) {
+float Json::valueToFloat(char* key) {
 	return atof(this->value(key));
 }
 
-inline double Json::valueToDouble(char* key) {
+double Json::valueToDouble(char* key) {
 	return atof(this->value(key));
 }
 
